@@ -1,0 +1,309 @@
+---
+title: "NLP Workshop - Text Mining"
+author: "Archana Chittoor"
+date: "November 22, 2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Session 2 - NLP Hands-On 
+
+In this session, we will start with basic functions in the "dplyr" package which is essential for data wrangling in R. We will proceed to look at some simple plots. Then we will perform some text mining and plot word clouds, followed by sentiment analysis.
+
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+install.packages("dplyr",repos = "http://cran.us.r-project.org")
+```
+#### Dplyr basics
+1. Count() function - counts the number of observations of a specific value
+
+```{r warning=FALSE,echo=FALSE, message =FALSE}
+library(dplyr)
+```
+```{r warning=FALSE}
+a <- c(1,2,3,4)
+b <- c(2,4,6,8)
+levels <- factor(c("A","B","A","B"))
+df <- data.frame(first=a,
+                 second=b,
+                 rank=levels)
+df
+df %>% 
+  count(rank)
+df %>% 
+  count(rank, sort = TRUE)
+
+```
+The arrange() function is used to sort columns. By default, it sorts in ascending order. For descending order, we need to specify 'desc'
+
+```{r warning=FALSE}
+df %>%
+  arrange(second)
+
+df %>%
+  arrange(desc(second))
+
+```
+The filter() function is used to filter rows in the data
+
+```{r warning=FALSE}
+df %>%
+  filter(rank == "A")
+# This gives only the rows with rank "A"
+
+df %>%
+  filter(first == "2")
+# This gives only the rows with first column as "2"
+```
+The join() function is used to join two data sets. Inner_join() combines both the data frames and generates a new data frame which has only the rows belonging to the common values of "ID" column
+
+```{r warning=FALSE}
+df1 = data.frame(ID = c(1, 2, 3, 4, 5),
+                 w = c('a', 'b', 'c', 'd', 'e'),
+                 x = c(1, 1, 0, 0, 1),
+                 y=rnorm(5),
+                 z=letters[1:5])
+
+df1
+df2 = data.frame(ID = c(1, 7, 3, 6, 8),
+                 a = c('z', 'b', 'k', 'd', 'l'),
+                 b = c(1, 2, 3, 0, 4),
+                 c =rnorm(5),
+                 d =letters[2:6])
+
+df2
+df3 = inner_join(df1, df2, by = "ID")
+df3
+```
+The anti_join() function produces as output the data from the first dataframe which is unique to it, it is like the complement of inner_join()
+```{r warning=FALSE}
+df3 = anti_join(df1, df2, by = "ID")
+df3
+df3 = anti_join(df2, df1, by = "ID")
+df3
+```
+### Basic Plotting in R
+
+```{r warning=FALSE, message = FALSE, fig.width=3,fig.height=3}
+install.packages("ggplot2", repos = "http://cran.us.r-project.org")
+library(ggplot2)
+df %>%
+  ggplot(aes(x = first,y = second)) +
+  geom_point()
+# plot with points
+```
+
+
+```{r warning=FALSE, fig.width=3, fig.height=3}
+# bar plot with points
+df %>%
+  ggplot(aes(x = first,y = second)) +
+  geom_col()
+
+#specifying color
+df %>%
+  ggplot(aes(x = first,y = second)) +
+  geom_col(fill = "blue") 
+
+# swapping the coordinates
+df %>%
+  ggplot(aes(x = first,y = second)) +
+  geom_col(fill = "red") +
+  coord_flip()
+
+```
+
+ Let's perform Text Analysis on our example, the works of Jane Austen
+
+###Text Analysis process
+
+#### 1. Collecting Raw text
+
+```{r warning=FALSE,message=FALSE}
+install.packages("janeaustenr", repos = "http://cran.us.r-project.org")
+install.packages("stringr", repos = "http://cran.us.r-project.org")
+
+library(janeaustenr)
+library(stringr)
+
+original_books <- austen_books()
+# text data can be represented as tidy text
+```
+#### 2.Representing Text
+
+To work with this as a tidy dataset, we need to restructure it in the one-token-per-row format
+
+```{r warning = FALSE, message=FALSE}
+install.packages("tidytext", repos = "http://cran.us.r-project.org")
+#install.packages("dplyr",repos = "http://cran.us.r-project.org")
+library(tidytext)
+#library(dlpyr)
+
+original_books
+tidy_books <- original_books %>%
+  unnest_tokens(word, text)
+
+# Here input is the text column of original_books and output is stored in the text column of tidy_books
+# This function uses the tokenizers package to separate each line of text in the original data frame into tokens. 
+
+# Other options are tokenizing into sentences, n-grams, regex etc.
+
+tidy_books_sentences <- original_books %>%
+  unnest_tokens(sentence, text,  token = "sentences")
+
+tidy_books_bigram <- original_books %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 2)
+
+tidy_books_chapter <- original_books %>%
+  unnest_tokens(chapter, text, token = "regex", pattern = "Chapter [\\d]")
+
+# For our purposes
+tidy_books <- original_books %>%
+  unnest_tokens(word, text)
+
+tidy_books
+
+# remove stop words with an anti_join function.
+tidy_books <- tidy_books %>%
+  anti_join(stop_words)
+
+tidy_books
+```
+
+#### 3. Analyzing word and document frequency: tf-idf
+
+One measure of how important a word may be is its term frequency (tf) -  
+how frequently a word occurs in a document
+
+Another approach is to look at a term’s inverse document frequency (idf), 
+which decreases the weight for commonly used words and increases the weight for words that are not used very much in a collection of documents. 
+  This can be combined with term frequency to calculate a term’s tf-idf 
+(the two quantities multiplied together), the frequency of a term adjusted for how rarely it is used.
+  The statistic tf-idf is intended to measure how important a word is to a document in a collection (or corpus) of documents, for example, to one novel in a collection of novels or to one website in a collection of websites.
+
+#### Term frequency in our data (tf)
+
+We can use the already tidied data variable tidy_books
+```{r warning=FALSE}
+word_count <- tidy_books %>%
+  count(word, sort = TRUE)
+
+# counting with book name
+book_words <- tidy_books %>%
+  count(book, word, sort = TRUE) 
+
+book_words
+```
+
+There is one row in this book_words data frame for each word-book combination.
+n is the number of times that word is used in that book and total is the total words in that book. 
+  The usual words are here with the highest n, “the”, “and”, “to”, and so on
+
+#### The bind_tf_idf function:
+
+```{r warning=FALSE}
+book_words <- book_words %>%
+  bind_tf_idf(word, book, n)
+
+book_words
+```
+Notice that idf and thus tf-idf are zero for these extremely common words. 
+These are all words that appear in all six of Jane Austen’s novels, so the idf term (which will then be the natural log of 1) is zero. 
+  The inverse document frequency (and thus tf-idf) is very low (near zero) for words that occur in many of the documents in a collection; this is how this approach decreases the weight for common words.
+
+```{r warning=FALSE}
+book_words %>%
+  arrange(desc(tf_idf))
+```
+
+```{r warning=FALSE,echo = FALSE, fig.width=3, fig.height=3}
+#library(ggplot2)
+# The plot shows a visualization of the most common words in these books
+word_count %>% 
+  filter(n > 600) %>%
+    ggplot(aes(word,n)) +
+      geom_col(fill = "blue")+
+        coord_flip()
+
+# Here we see all proper nouns, names that are in fact important in these novels. 
+```
+
+#### 4. Sentiment Analysis
+There are a variety of methods and dictionaries that exist for evaluating the opinion or emotion in text. Eg., AFINN, bing, nrc
+
+```{r warning=FALSE, message=FALSE}
+install.packages("textdata", repos = "http://cran.us.r-project.org")
+library(textdata)
+get_sentiments("nrc")
+
+nrc_joy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "joy")
+
+emma_words <- tidy_books %>%
+  filter(book == "Emma")
+
+emma_words_joy <- emma_words %>% 
+  inner_join(nrc_joy)
+
+emma_words_joy_count <- emma_words_joy %>%
+  count(word, sort = TRUE)
+
+# Or this can be specified in the below manner:
+
+emma_words_joy_count <- tidy_books %>%
+filter(book == "Emma") %>%
+     inner_join(nrc_joy) %>% 
+       count(word, sort = TRUE)
+
+bing_word_counts <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE)
+
+bing_word_counts
+
+```
+#### Most common positive and negative words
+```{r warning=FALSE, fig.width=3,fig.height=3}
+poswords <- filter(bing_word_counts,sentiment == "positive" & n >150)
+
+poswords %>%
+  ggplot(aes(word, n)) +
+  geom_col(fill = "chartreuse3") +
+  coord_flip()
+
+negwords <- filter(bing_word_counts,sentiment == "negative" & n >100)    
+
+negwords %>%
+  ggplot(aes(word, n)) +
+  geom_col(fill = "brown3") +
+  coord_flip()
+```
+
+#### 5. Gain Insights
+##### Word clouds with the most frequent words
+
+```{r warning=FALSE, message = FALSE, fig.width=4,fig.height=4}
+install.packages("wordcloud", repos = "http://cran.us.r-project.org")
+install.packages("reshape2", repos = "http://cran.us.r-project.org")
+library(wordcloud)
+library(reshape2)
+
+word_count %>%
+  with(wordcloud(word, n, max.words = 100))
+
+# Specifying colors
+word_count %>%
+  with(wordcloud(word, n, colors = c("red","blue","green"), max.words = 100))
+
+# Plotting a Comparison Cloud
+
+bing_word_counts %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("brown4","chartreuse4"),
+                   max.words = 100)
+```
+
